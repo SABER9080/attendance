@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>بصمة الحضور</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap">
+<style>
+/* Layout: single centered column, big clock, one primary action. */
+:root{
+  --bg:#f3f5f4; --card:#ffffff; --fg:#14211c; --muted:#5d6b65; --line:#dbe2de;
+  --accent:#0d6b50; --accent-fg:#ffffff; --out:#b4531a; --ok:#0d6b50; --bad:#b3261e;
+  --font:'Cairo',system-ui,-apple-system,'Segoe UI',Tahoma,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){--bg:#0f1714;--card:#18231f;--fg:#e8f0ec;--muted:#93a39b;--line:#2a3a34;--accent:#3fb98f;--accent-fg:#06231a;--out:#e08a4d;--ok:#3fb98f;--bad:#ff8a80;color-scheme:dark}
+}
+:root[data-theme="dark"]{--bg:#0f1714;--card:#18231f;--fg:#e8f0ec;--muted:#93a39b;--line:#2a3a34;--accent:#3fb98f;--accent-fg:#06231a;--out:#e08a4d;--ok:#3fb98f;--bad:#ff8a80;color-scheme:dark}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:16px;line-height:1.6;
+  padding-block:20px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:460px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h1{font-size:1.15rem;margin:0;font-weight:800}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.demo{background:#fff3cd;color:#5c4400;border-radius:8px;padding:8px 12px;font-size:.85rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.clock{text-align:center}
+.clock .t{font-size:3rem;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:.02em;direction:ltr}
+.clock .d{color:var(--muted);font-size:.95rem}
+label{font-size:.85rem;color:var(--muted);font-weight:600}
+input,select{width:100%;font:inherit;padding:11px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.field{display:flex;flex-direction:column;gap:5px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{font:inherit;font-weight:800;border:0;border-radius:10px;padding:14px;cursor:pointer;background:var(--accent);color:var(--accent-fg);font-size:1.05rem}
+button.out{background:var(--out);color:#fff}
+button.ghost{background:transparent;color:var(--fg);border:1px solid var(--line);font-weight:600;font-size:.9rem;padding:9px 12px}
+button:disabled{opacity:.5;cursor:not-allowed}
+.geo{display:flex;align-items:center;gap:10px;font-size:.92rem;min-width:0}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--muted);flex:none}
+.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}
+.msg{padding:12px;border-radius:8px;font-weight:600;font-size:.95rem}
+.msg.ok{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.msg.bad{background:color-mix(in srgb,var(--bad) 15%,transparent);color:var(--bad)}
+.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:.9rem}
+.log li{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--line);padding-bottom:6px}
+.log .tm{font-variant-numeric:tabular-nums;direction:ltr}
+.muted{color:var(--muted);font-size:.85rem}
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><h1>بصمة الحضور والانصراف</h1><button class="ghost" id="themeBtn" type="button">الوضع</button></div>
+  <div class="demo" id="demo" hidden>وضع تجريبي: البيانات بتتحفظ على الجهاز بس. حط رابط السكريبت في SCRIPT_URL عشان تتسجل في الشيت.</div>
+
+  <section class="card clock" aria-live="off">
+    <div class="t" id="time">--:--:--</div>
+    <div class="d" id="date"></div>
+  </section>
+
+  <section class="card">
+    <div class="field"><label for="code">كود الموظف</label><input id="code" inputmode="numeric" autocomplete="off" placeholder="مثال: 101"></div>
+    <div class="field"><label for="pin">الرقم السري</label><input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="••••"></div>
+    <div class="field"><label for="branch">الفرع</label><select id="branch"></select></div>
+    <div class="geo"><span class="dot" id="dot"></span><span id="geoText">لسه ماتحددش موقعك</span></div>
+    <div class="row">
+      <button id="inBtn" type="button">تسجيل حضور</button>
+      <button id="outBtn" type="button" class="out">تسجيل انصراف</button>
+    </div>
+    <div id="result" role="status"></div>
+  </section>
+
+  <section class="card">
+    <strong>آخر تسجيلاتك</strong>
+    <ul class="log" id="log"></ul>
+    <div class="muted" id="logEmpty">مفيش تسجيلات لسه.</div>
+  </section>
+</main>
+
+<script>
+/* ===== الإعدادات ===== */
+// حط هنا رابط Web App بتاع Google Apps Script (الخطوات في ملف apps-script.gs)
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw5j-YJFvhJaIfTLWcv845657A7LRgw1szN-se_roqyXjq3JRVNH25SBDXgz_XSqZF4Eg/exec";
+// فروع تجريبية تُستخدم فقط لما SCRIPT_URL فاضي
+const DEMO_BRANCHES = [{name:"الفرع الرئيسي - القاهرة",lat:30.0444,lng:31.2357,radius:100}];
+const DEMO_EMPLOYEES = [{code:"101",name:"موظف تجريبي",branch:"",pin:"1234"}];
+const MAX_ACCURACY = 80; // أقصى دقة GPS مقبولة بالمتر
+
+/* ===== أدوات ===== */
+const $ = id => document.getElementById(id);
+const DEMO = !SCRIPT_URL;
+let branches = [], pos = null;
+
+function store(k,v){try{if(v===undefined)return JSON.parse(localStorage.getItem(k));localStorage.setItem(k,JSON.stringify(v))}catch(e){return null}}
+function dist(a,b,c,d){const R=6371000,t=x=>x*Math.PI/180,dl=t(c-a),dn=t(d-b);
+  const h=Math.sin(dl/2)**2+Math.cos(t(a))*Math.cos(t(c))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
+function say(text,ok){$("result").innerHTML="";if(!text)return;const d=document.createElement("div");d.className="msg "+(ok?"ok":"bad");d.textContent=text;$("result").appendChild(d)}
+
+/* ===== الساعة ===== */
+function tick(){const n=new Date();
+  $("time").textContent=n.toLocaleTimeString("en-GB");
+  $("date").textContent=n.toLocaleDateString("ar-EG",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}
+setInterval(tick,1000);tick();
+
+/* ===== الفروع ===== */
+async function loadBranches(){
+  if(DEMO){branches=DEMO_BRANCHES;$("demo").hidden=false}
+  else{try{const r=await fetch(SCRIPT_URL);const j=await r.json();branches=j.branches}catch(e){branches=store("branches")||[];say("تعذر تحميل الفروع، تأكد من الاتصال.",false)}}
+  store("branches",branches);
+  $("branch").innerHTML="";
+  branches.forEach((b,i)=>{const o=document.createElement("option");o.value=i;o.textContent=b.name;$("branch").appendChild(o)});
+  const last=store("lastBranch");if(last!=null&&branches[last])$("branch").value=last;
+  const c=store("lastCode");if(c)$("code").value=c;
+  updateGeo();
+}
+
+/* ===== الموقع ===== */
+function locate(){return new Promise((res,rej)=>{
+  if(!navigator.geolocation)return rej(new Error("المتصفح مش بيدعم تحديد الموقع."));
+  navigator.geolocation.getCurrentPosition(p=>res(p.coords),e=>rej(new Error(
+    e.code===1?"لازم تسمح للصفحة بالوصول لموقعك من إعدادات المتصفح.":"تعذر تحديد موقعك، جرب مرة تانية في مكان مفتوح.")),
+    {enableHighAccuracy:true,timeout:15000,maximumAge:0})})}
+
+function updateGeo(){
+  const dot=$("dot"),t=$("geoText"),b=branches[$("branch").value];
+  if(!pos||!b){dot.className="dot";t.textContent="هيتحدد موقعك لما تضغط على تسجيل.";return}
+  const d=Math.round(dist(pos.latitude,pos.longitude,+b.lat,+b.lng)),ok=d<=+b.radius&&pos.accuracy<=MAX_ACCURACY;
+  dot.className="dot "+(ok?"ok":"bad");
+  t.textContent=ok?`جوه نطاق الفرع (${d} متر، دقة ${Math.round(pos.accuracy)} م)`:`بعيد عن الفرع ${d} متر (المسموح ${b.radius} م)`;
+}
+$("branch").addEventListener("change",updateGeo);
+
+/* ===== التسجيل ===== */
+async function punch(type){
+  say("");
+  const code=$("code").value.trim(),pin=$("pin").value.trim(),bi=$("branch").value,b=branches[bi];
+  if(!code||!pin)return say("اكتب كود الموظف والرقم السري.",false);
+  if(!b)return say("اختار الفرع.",false);
+  $("inBtn").disabled=$("outBtn").disabled=true;
+  try{
+    pos=await locate();updateGeo();
+    if(pos.accuracy>MAX_ACCURACY)throw new Error(`دقة الموقع ضعيفة (${Math.round(pos.accuracy)} م). اخرج لمكان مفتوح وجرب تاني.`);
+    const payload={code,pin,branch:b.name,type,lat:pos.latitude,lng:pos.longitude,accuracy:pos.accuracy};
+    const j=DEMO?demoPunch(payload,b):await send(payload);
+    if(!j.ok)throw new Error(j.error||"فشل التسجيل.");
+    store("lastCode",code);store("lastBranch",bi);
+    say(`${type==="in"?"تم تسجيل الحضور":"تم تسجيل الانصراف"} ${j.name?"للموظف "+j.name:""} (${j.distance} متر من الفرع)`,true);
+    pushLog({type,time:new Date().toISOString(),branch:b.name});
+  }catch(e){say(e.message,false)}
+  $("inBtn").disabled=$("outBtn").disabled=false;
+}
+async function send(p){
+  const r=await fetch(SCRIPT_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(p)});
+  return r.json();
+}
+function demoPunch(p,b){
+  const e=DEMO_EMPLOYEES.find(x=>x.code===p.code&&x.pin===p.pin);
+  if(!e)return{ok:false,error:"الكود أو الرقم السري غلط. (التجريبي: 101 / 1234)"};
+  const d=Math.round(dist(p.lat,p.lng,+b.lat,+b.lng));
+  if(d>+b.radius)return{ok:false,error:`إنت بعيد عن الفرع ${d} متر. المسموح ${b.radius} متر.`};
+  return{ok:true,name:e.name,distance:d};
+}
+
+/* ===== السجل المحلي ===== */
+function pushLog(x){const l=store("log")||[];l.unshift(x);store("log",l.slice(0,8));renderLog()}
+function renderLog(){
+  const l=store("log")||[],ul=$("log");ul.innerHTML="";$("logEmpty").hidden=l.length>0;
+  l.forEach(x=>{const li=document.createElement("li"),a=document.createElement("span"),b=document.createElement("span"),d=new Date(x.time);
+    a.textContent=(x.type==="in"?"حضور":"انصراف")+" - "+x.branch;
+    b.className="tm";b.textContent=d.toLocaleDateString("en-GB")+" "+d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
+    li.append(a,b);ul.appendChild(li)})}
+
+$("inBtn").addEventListener("click",()=>punch("in"));
+$("outBtn").addEventListener("click",()=>punch("out"));
+$("themeBtn").addEventListener("click",()=>{
+  const r=document.documentElement,dark=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;
+  r.dataset.theme=dark?"light":"dark"});
+renderLog();loadBranches();
+</script>
+</body>
+</html>
